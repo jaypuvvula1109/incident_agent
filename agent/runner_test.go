@@ -35,7 +35,7 @@ func TestRunAll_AllToolsSucceed(t *testing.T) {
 		SymptomHint:      "5xx",
 	}
 
-	results := runner.RunAll(context.Background(), ic)
+	results := runner.RunAll(context.Background(), ic, time.Now())
 
 	// 3 base tools + one get_service_health per affected service (2) = 5.
 	require.Len(t, results, 5)
@@ -63,7 +63,7 @@ func TestRunAll_OneToolReturnsError(t *testing.T) {
 		SymptomHint:      "5xx",
 	}
 
-	results := runner.RunAll(context.Background(), ic)
+	results := runner.RunAll(context.Background(), ic, time.Now())
 	require.Len(t, results, 4) // 3 base + 1 service
 
 	byName := resultsByName(results)
@@ -101,7 +101,7 @@ func TestRunAll_OneToolTimesOut(t *testing.T) {
 	}
 
 	start := time.Now()
-	results := runner.RunAll(ctx, ic)
+	results := runner.RunAll(ctx, ic, time.Now())
 	elapsed := time.Since(start)
 
 	// RunAll must return promptly (not wait out the 200ms slow tool much
@@ -137,7 +137,7 @@ func TestRunAll_GlobalContextCancelled(t *testing.T) {
 		SymptomHint:      "5xx",
 	}
 
-	results := runner.RunAll(ctx, ic)
+	results := runner.RunAll(ctx, ic, time.Now())
 
 	// RunAll still returns all tool slots, each as a failure.
 	require.Len(t, results, 5)
@@ -175,7 +175,7 @@ func TestProperty3_ToolFailuresNeverSuppressInvestigation(t *testing.T) {
 			SymptomHint:      "5xx",
 		}
 
-		results := runner.RunAll(context.Background(), ic)
+		results := runner.RunAll(context.Background(), ic, time.Now())
 
 		// RunAll always returns a non-nil slice and never panics.
 		require.NotNil(t, results)
@@ -223,7 +223,7 @@ func TestProperty11_FailureMetadataAlwaysComplete(t *testing.T) {
 			SymptomHint:      "5xx",
 		}
 
-		results := runner.RunAll(context.Background(), ic)
+		results := runner.RunAll(context.Background(), ic, time.Now())
 		require.NotEmpty(t, results)
 
 		for _, r := range results {
@@ -255,7 +255,7 @@ func TestProperty12_KnowledgeBaseCalledExactlyOnce(t *testing.T) {
 			SymptomHint:      symptomHint,
 		}
 
-		results := runner.RunAll(context.Background(), ic)
+		results := runner.RunAll(context.Background(), ic, time.Now())
 
 		// Sanity: 3 base tools + one health tool per service.
 		require.Len(t, results, 3+len(services))

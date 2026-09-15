@@ -39,6 +39,10 @@ func NewConcurrentToolRunner(provider tools.ToolProvider) *ConcurrentToolRunner 
 // passed ctx carries the global 30-second deadline set by the caller; when it
 // is cancelled, in-flight goroutines unblock at their next context check.
 //
+// incidentTS is the authoritative incident timestamp supplied by the
+// InvestigatorAgent facade (derived from the get_incident record's CreatedAt,
+// falling back to time.Now()). It anchors the deployment lookback window.
+//
 // All failures — errors, per-tool timeouts, and parent-context cancellation —
 // are materialised as ToolResult{Success: false} with ErrorMessage and
 // FailureTimestamp populated. RunAll itself never returns an error.
@@ -46,7 +50,7 @@ func NewConcurrentToolRunner(provider tools.ToolProvider) *ConcurrentToolRunner 
 // Concurrency safety: results are appended under a mutex, and every goroutine
 // defers wg.Done, so wg.Wait blocks until all goroutines have returned. No
 // goroutine outlives this call.
-func (r *ConcurrentToolRunner) RunAll(ctx context.Context, ic models.IncidentContext) []models.ToolResult {
+func (r *ConcurrentToolRunner) RunAll(ctx context.Context, ic models.IncidentContext, incidentTS time.Time) []models.ToolResult {
 	var mu sync.Mutex
 	var results []models.ToolResult
 
@@ -86,21 +90,15 @@ func (r *ConcurrentToolRunner) RunAll(ctx context.Context, ic models.IncidentCon
 	go func() {
 		defer wg.Done()
 		launch("get_recent_deployments", func(c context.Context) (any, error) {
-			// Stage 1 limitation: the authoritative incident timestamp comes
-			// from the get_incident record's CreatedAt, which is only known at
-			// runtime after that tool resolves. IncidentContext does not carry
-			// a timestamp field, and adding one here would ripple into the
-			// prompt-analysis and agent-facade tasks. So the runner anchors the
-			// deployment window on time.Now() as a Stage 1 approximation.
-			//
-			// The InvestigatorAgent facade (task 10.1) is responsible for the
-			// authoritative incident timestamp: it derives incidentTS from the
-			// get_incident result (falling back to time.Now()) and passes it to
-			// the EvidenceAssembler, which performs the recency-based selection
-			// of deployment records. The 60-minute lookahead here is a coarse
-			// pre-filter; final truncation to the 50 closest records happens in
-			// the assembler using the authoritative timestamp.
-			to := time.Now()
+			// The authoritative incident timestamp is passed in by the
+			// InvestigatorAgent facade, which derives it from the get_incident
+			// record's CreatedAt (falling back to time.Now()). The deployment
+			// window spans the 60 minutes leading up to the incident timestamp
+			// (Requirement 3.1). The 60-minute lookback here is a coarse
+			// pre-filter; final truncation to the 50 records closest to the
+			// incident timestamp happens in the EvidenceAssembler using the
+			// same authoritative timestamp.
+			to := incidentTS
 			return r.provider.GetRecentDeployments(c, to.Add(-60*time.Minute), to)
 		})
 	}()
