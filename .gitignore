@@ -1,0 +1,14 @@
+# Local environment / secrets
+local.env
+.env
+*.env
+!local.env.example
+
+# Compiled binary
+/incident-agent
+
+# DuckDB data files
+*.duckdb
+
+# OS / editor cruft
+.DS_Store
